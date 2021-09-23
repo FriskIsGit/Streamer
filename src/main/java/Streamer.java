@@ -1,27 +1,21 @@
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.IOException;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-
+import java.net.*;
 
 
 class Streamer{
-    private final Socket clientSocket;
+    private Socket clientSocket;
     private ServerSocket serverSocket;
-    protected volatile static Socket acceptedSocket;
     private final JFrame frame;
     private final int TIMEOUT_MS;
     private final JTextField status;
-
     protected Streamer(){
         frame = new JFrame("Streamer");
         status = new JTextField("STATUS");
-        clientSocket = new Socket();
         TIMEOUT_MS = 3000;
     }
 
@@ -85,7 +79,6 @@ class Streamer{
                 portField.setVisible(false);
                 submitButton.setVisible(false);
                 ipField.setVisible(false);
-
             }
         });
         backButton.setVisible(false);
@@ -128,11 +121,11 @@ class Streamer{
                 //server creation
                 String strIP = ipField.getText();
                 String portStr = portField.getText();
+                if (portStr.length() > 5 || !portStr.matches("[0-9]+")){
+                    status.setText("Invalid port");
+                    return;
+                }
                 if (ipBindCheck.isVisible()){
-                    if (portStr.length() > 5 || !portStr.matches("[0-9]+")){
-                        status.setText("Invalid port");
-                        return;
-                    }
                     if (!ipBindCheck.isSelected()){
                         try{
                             serverSocket = new ServerSocket(Integer.parseInt(portStr));
@@ -155,20 +148,18 @@ class Streamer{
                 //client connects
                 else{
                     try{
-                        if (portStr.length() > 5 || !portStr.matches("[0-9]+")){
-                            status.setText("Invalid port");
-                            return;
-                        }
+                        System.out.println("is it triggered everytime");
                         int port = Integer.parseInt(portStr);
+                        //always creating a new socket to prevent closed socket exceptions
+                        clientSocket = new Socket();
                         clientSocket.connect(new InetSocketAddress(strIP, port), TIMEOUT_MS);
                         status.setText("Connected to server");
                         hideUnnecessaryComponents();
                         ConnectionFrame connection = new ConnectionFrame(frame,clientSocket);
-                        frame.add(connection);
                         connection.run();
 
-
-                    }catch (IOException conError){
+                    }catch (IOException err){
+                        err.printStackTrace();
                         status.setText("Failed to connect");
                     }
                 }
@@ -196,7 +187,7 @@ class Streamer{
 
     private void runFrame(){
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(450, 300);
+        frame.setSize(500, 300);
         frame.setLocation(50, 50);
         frame.getContentPane().setBackground(Color.gray);
         frame.setLayout(new GridLayout(0, 2));

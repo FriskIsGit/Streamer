@@ -36,7 +36,6 @@ class AwaitConnection extends SwingWorker<Object, Object>{
     protected void done(){
         status.setText("Connection Established");
         ConnectionFrame connection = new ConnectionFrame(this.rootFrame,this.acceptedSocket);
-        this.rootFrame.add(connection);
         connection.run();
         hideComponents();
     }

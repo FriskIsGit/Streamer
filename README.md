@@ -1,2 +1,8 @@
-# Streamer
-Stream video
+# Streamer Program
+## Stream your desktop live 
+- connect to server / create server for client
+- take screenshots as buffered images
+- convert buffered images to JPGs
+- send / receive JPGs over a byte stream
+- convert JPGs to buffered image
+- draw image inside frame
