@@ -112,7 +112,7 @@ class ConnectionFrame{
 
         Thread receivingThread = new Thread(new Runnable(){
             private static final int PANE_SIDE_DIST = 8;
-            private static final int PANE_TOP_DIST = 8;
+            private static final int PANE_TOP_DIST = 30;
 
             @Override
             public void run(){
@@ -123,7 +123,6 @@ class ConnectionFrame{
                 while (true){
                     sleep(200);
                     while (watching){
-
                         try{
                             int totalBytes = 0;
                             int currentRead;
