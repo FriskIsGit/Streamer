@@ -1,52 +1,71 @@
-import com.sun.image.codec.jpeg.JPEGCodec;
-import com.sun.image.codec.jpeg.JPEGImageEncoder;
+
+
+// TODO: 2021-09-24 AffineTransform, FULL screen mode, HOST ARCH (BTW) BASED SCREEN SHARING NETWORK,
+///////////////////////////////////////////////////////////////////////////
+// JPEG image files begin with FF D8 and end with FF D9
+//  start 255,216; end 255,217
+//  actual -1 -40    -1 -39 jpg
+///////////////////////////////////////////////////////////////////////////
+
+
+import uk.ac.manchester.tornado.api.annotations.Parallel;
 
 import javax.imageio.ImageIO;
-import javax.swing.*;
+import javax.imageio.stream.ImageOutputStream;
+import javax.swing.JFrame;
+import javax.swing.JButton;
+
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+
 import java.awt.image.BufferedImage;
+import java.awt.image.RenderedImage;
 import java.io.*;
 import java.net.Socket;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
-/**
- * JPEG image files begin with FF D8 and end with FF D9
- * start 255,216; end 255,217
- * actual -1 -40    -1 -39 jpg
- * 77 90 -112   115 111 110
- */
+
 class ConnectionFrame{
 
     private final JFrame streamFrame;
     private final JFrame rootFrame;
-    private DataOutputStream dos;
-    private DataInputStream dis;
+    private DataOutputStream dos1;
+    private DataOutputStream dos2;
+    private DataInputStream dis1;
+    private DataInputStream dis2;
     private Robot bot;
     private final Dimension screenDimensions;
     private final Rectangle screenRectangle;
     volatile private boolean streaming = false;
     volatile private boolean watching = false;
     final static private int CHUNK_SIZE_BYTES = 30000;
-    final static private int MB = 1048576;
+    final static private int MB = 1_048_576;
+    final static private double SCREEN_WIDTH = 1920;
+    final static private double SCREEN_HEIGHT = 1080;
     //private final LinkedList<Integer> times = new LinkedList<>();
     final private Color RED;
     final private Color GREEN;
+    final private Lock STREAMING_LOCK = new ReentrantLock();
+    final private Lock WATCHING_LOCK = new ReentrantLock();
 
-    protected ConnectionFrame(JFrame frame, Socket socket) {
+    protected ConnectionFrame(JFrame frame, Socket socket1, Socket socket2) {
         this.rootFrame = frame;
         this.RED = new Color(255, 74, 0);
         this.GREEN = new Color(64, 180, 0);
         try{
-            this.dos = new DataOutputStream(socket.getOutputStream());
-            this.dis = new DataInputStream(socket.getInputStream());
+            this.dos1 = new DataOutputStream(socket1.getOutputStream());
+            this.dis1 = new DataInputStream(socket1.getInputStream());
+            this.dos2 = new DataOutputStream(socket2.getOutputStream());
+            this.dis2 = new DataInputStream(socket2.getInputStream());
         }catch (IOException ioException){
             System.err.println("Error thrown at streams");
         }
         rootFrame.setLocation(0,10);
         streamFrame = new JFrame("--STREAM--");
         //screenDimensions = Toolkit.getDefaultToolkit().getScreenSize();
-        screenDimensions = new Dimension(1920,1080);
+        screenDimensions = new Dimension((int)SCREEN_WIDTH,(int)SCREEN_HEIGHT);
         screenRectangle = new Rectangle(screenDimensions);
         try{
             bot = new Robot();
@@ -55,69 +74,132 @@ class ConnectionFrame{
         }
     }
 
-
     protected void run(){
         addChoicesToRoot();
         setup();
         startThreads();
     }
-
+    @SuppressWarnings("all")
     private void startThreads(){
-        Thread streamingThread = new Thread(new Runnable(){
+        @Parallel
+        Thread streamingThread1 = new Thread(new Runnable(){
             @Override
             public void run(){
-                System.out.println("Entered streaming loop");
-                ByteArrayOutputStream os = new ByteArrayOutputStream();
+                System.out.println("Entered streaming loop1");
 
-                JPEGImageEncoder encoder = JPEGCodec.createJPEGEncoder(os);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+                //encoder = JPEGCodec.createJPEGEncoder(os);
+                ImageOutputStream ios = null;
+                try{
+                    ios = ImageIO.createImageOutputStream(baos);
+                }catch (IOException ioException){
+                    ioException.printStackTrace();
+                }
+                try{
+                    bot = new Robot();
+                }catch (AWTException e){
+                    e.printStackTrace();
+                }
                 while(true){
                     sleep(200);
                     while (streaming){
-                        BufferedImage img = bot.createScreenCapture(screenRectangle);
-                        os.reset();
+                        @Parallel
+                        BufferedImage bfrdImg = bot.createScreenCapture(screenRectangle);
+                        @Parallel
+                        RenderedImage image = (RenderedImage) bfrdImg;
                         try{
                             //long st = System.currentTimeMillis();
-                            encoder.encode(img);
+                            ImageIO.write(image,"jpg", ios);
+                            //encoder.encode(image);
                             //long en = System.currentTimeMillis();
-                            //times.add((int) (en-st));
-                            //ImageIO.write(img,"jpg", os);
-                            byte [] jpgBytes = os.toByteArray();
+                            //list.add((int) (en-st));
+                            byte [] jpgBytes = baos.toByteArray();
                             final int JPG_SIZE = jpgBytes.length;
                             int totalBytes = 0;
                             while(true){
                                 if(totalBytes + CHUNK_SIZE_BYTES > JPG_SIZE){
-                                    dos.write(jpgBytes,totalBytes,JPG_SIZE-totalBytes);
-                                    //dos.flush();
+                                    dos1.write(jpgBytes,totalBytes,JPG_SIZE-totalBytes);
                                     break;
                                 }
-                                dos.write(jpgBytes,totalBytes,CHUNK_SIZE_BYTES);
+                                dos1.write(jpgBytes,totalBytes,CHUNK_SIZE_BYTES);
                                 totalBytes+=CHUNK_SIZE_BYTES;
                             }
                         }catch (IOException ioExc){
                             ioExc.printStackTrace();
                         }
+                        baos.reset();
                     }
-                    /*int size = times.size();
-                    if(size==0) continue;
-                    System.out.println("Enumerating");
-                    long sum=0;
-                    for(int lap : times){
-                        sum+=lap;
-                    }
-                    times.clear();
-                    System.out.println("Average: " + (sum / size));*/
+
                 }
             }
         });
 
-        Thread receivingThread = new Thread(new Runnable(){
+        @Parallel
+        Thread streamingThread2 = new Thread(new Runnable(){
+            @Override
+            public void run(){
+                System.out.println("Entered streaming loop2");
+
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+                ImageOutputStream ios = null;
+                try{
+                    ios = ImageIO.createImageOutputStream(baos);
+                }catch (IOException ioException){
+                    ioException.printStackTrace();
+                }
+                try{
+                    bot = new Robot();
+                }catch (AWTException e){
+                    e.printStackTrace();
+                }
+                while (true){
+                    sleep(200);
+                    while (streaming){
+                        @Parallel
+                        BufferedImage bfrdImg;
+
+                        STREAMING_LOCK.lock();
+                        try{
+                            bfrdImg = bot.createScreenCapture(screenRectangle);
+                        }finally{
+                            STREAMING_LOCK.unlock();
+                        }
+                        @Parallel
+                        RenderedImage image = (RenderedImage) bfrdImg;
+                        try{
+                            ImageIO.write(image, "jpg", ios);
+                            byte[] jpgBytes = baos.toByteArray();
+                            final int JPG_SIZE = jpgBytes.length;
+                            int totalBytes = 0;
+                            while (true){
+                                if (totalBytes + CHUNK_SIZE_BYTES > JPG_SIZE){
+                                    dos2.write(jpgBytes, totalBytes, JPG_SIZE - totalBytes);
+                                    break;
+                                }
+                                dos2.write(jpgBytes, totalBytes, CHUNK_SIZE_BYTES);
+                                totalBytes += CHUNK_SIZE_BYTES;
+                            }
+                            baos.reset();
+                        }catch (IOException ioExc){
+                            ioExc.printStackTrace();
+                        }
+                    }
+                }
+            }
+        });
+        @Parallel
+        Thread receivingThread1 = new Thread(new Runnable(){
             private static final int PANE_SIDE_DIST = 8;
             private static final int PANE_TOP_DIST = 30;
 
             @Override
             public void run(){
                 System.out.println("Entered receiving loop");
+
                 Graphics frameGraphics = streamFrame.getGraphics();
+
                 sleep(200);
                 streamFrame.setVisible(false);
                 while (true){
@@ -127,22 +209,96 @@ class ConnectionFrame{
                             int totalBytes = 0;
                             int currentRead;
                             byte[] bytes = new byte[MB];
+
                             do{
-                                currentRead = dis.read(bytes, totalBytes, CHUNK_SIZE_BYTES);
+                                currentRead = dis1.read(bytes, totalBytes, CHUNK_SIZE_BYTES);
                                 totalBytes+=currentRead;
                             }while (!(bytes[totalBytes-2]==-1 && bytes[totalBytes-1]==-39));
-                            //long st = System.currentTimeMillis();
-                            frameGraphics.drawImage(ImageIO.read(new ByteArrayInputStream(bytes, 0, totalBytes)), PANE_SIDE_DIST, PANE_TOP_DIST, null);
-                            //long en = System.currentTimeMillis();
-                            //System.out.println((en-st));
-                        }catch (IOException  | IndexOutOfBoundsException exc){}
+                            @Parallel
+                            Image receivedImg;
+                            WATCHING_LOCK.lock();
+                            try{
+                                receivedImg = ImageIO.read(new ByteArrayInputStream(bytes, 0, totalBytes));
+                            }finally{
+                                WATCHING_LOCK.unlock();
+                            }
+
+                            if(receivedImg==null) continue;
+                            try{
+
+                                receivedImg = receivedImg.getScaledInstance(streamFrame.getWidth() - 16,streamFrame.getHeight() - 38, Image.SCALE_AREA_AVERAGING);
+                                //final AffineTransform affineScale = AffineTransform.getScaleInstance((double)(streamFrame.getWidth() - 16) / SCREEN_WIDTH, (double)(streamFrame.getHeight() - 38)/ SCREEN_HEIGHT);
+                                //final AffineTransformOp ato = new AffineTransformOp(affineScale, AffineTransformOp.TYPE_BICUBIC);
+                                //BufferedImage scaledImg = new BufferedImage(streamFrame.getWidth(), streamFrame.getHeight(), BufferedImage.TYPE_INT_ARGB);
+                                //frameGraphics.drawImage(ato.filter(receivedImg, scaledImg), PANE_SIDE_DIST, PANE_TOP_DIST, null);
+                                frameGraphics.drawImage(receivedImg,PANE_SIDE_DIST,PANE_TOP_DIST,null);
+                            }catch (Exception exc){
+                                exc.printStackTrace();
+                            }
+
+
+                        }catch (IOException  | IndexOutOfBoundsException ignored){}
+                    }
+                }
+            }
+        });
+        @Parallel
+        Thread receivingThread2 = new Thread(new Runnable(){
+            private static final int PANE_SIDE_DIST = 8;
+            private static final int PANE_TOP_DIST = 30;
+
+            @Override
+            public void run(){
+                System.out.println("Entered receiving loop");
+
+                Graphics frameGraphics = streamFrame.getGraphics();
+
+                sleep(200);
+
+                streamFrame.setVisible(false);
+                while (true){
+                    sleep(200);
+                    while (watching){
+                        try{
+                            int totalBytes = 0;
+                            int currentRead;
+                            byte[] bytes = new byte[MB];
+                            do{
+                                currentRead = dis2.read(bytes, totalBytes, CHUNK_SIZE_BYTES);
+                                totalBytes += currentRead;
+                            }while (!(bytes[totalBytes - 2] == -1 && bytes[totalBytes - 1] == -39));
+                            Image receivedImg;
+
+                            WATCHING_LOCK.lock();
+                            try{
+                                receivedImg = ImageIO.read(new ByteArrayInputStream(bytes, 0, totalBytes));
+                            }finally{
+                                WATCHING_LOCK.unlock();
+                            }
+                            if (receivedImg == null) continue;
+                            try{
+                                receivedImg = receivedImg.getScaledInstance(streamFrame.getWidth() - 16, streamFrame.getHeight() - 38, Image.SCALE_AREA_AVERAGING);
+                                //final AffineTransform affineScale = AffineTransform.getScaleInstance((double)(streamFrame.getWidth() - 16) / SCREEN_WIDTH, (double)(streamFrame.getHeight() - 38)/ SCREEN_HEIGHT);
+                                //final AffineTransformOp ato = new AffineTransformOp(affineScale, AffineTransformOp.TYPE_BICUBIC);
+                                //BufferedImage scaledImg = new BufferedImage(streamFrame.getWidth(), streamFrame.getHeight(), BufferedImage.TYPE_INT_ARGB);
+                                //frameGraphics.drawImage(ato.filter(receivedImg, scaledImg), PANE_SIDE_DIST, PANE_TOP_DIST, null);
+                                frameGraphics.drawImage(receivedImg, PANE_SIDE_DIST, PANE_TOP_DIST, null);
+                            }catch (Exception exc){
+                                exc.printStackTrace();
+                            }
+
+
+                        }catch (IOException | IndexOutOfBoundsException ignored){
+                        }
                     }
                 }
             }
         });
 
-        streamingThread.start();
-        receivingThread.start();
+        streamingThread1.start();
+        receivingThread1.start();
+        streamingThread2.start();
+        receivingThread2.start();
     }
 
     private void addChoicesToRoot(){
@@ -160,6 +316,7 @@ class ConnectionFrame{
                     streamFrame.setVisible(false);
                     Graphics graphics = streamFrame.getGraphics();
                     graphics.setColor(Color.BLACK);
+
                     graphics.fillRect(0,0,streamFrame.getWidth(),streamFrame.getHeight());
                     streamFrame.repaint();
                     watchStream.setForeground(RED);
@@ -202,6 +359,7 @@ class ConnectionFrame{
         streamFrame.setSize((int)screenDimensions.getWidth()/2, height);
         streamFrame.setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
         streamFrame.getContentPane().setBackground(Color.black);
+
         streamFrame.setVisible(true);
     }
     private void sleep(int time){

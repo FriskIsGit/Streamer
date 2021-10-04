@@ -1,15 +1,28 @@
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.JFrame;
+import javax.swing.JButton;
+import javax.swing.JTextField;
+import javax.swing.JCheckBox;
+import javax.swing.SwingConstants;
+
+import java.awt.Font;
+import java.awt.Color;
+import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.DataInputStream;
 import java.io.IOException;
-import java.net.*;
+
+import java.net.Socket;
+import java.net.ServerSocket;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 
 
 class Streamer{
-    private Socket clientSocket;
-    private ServerSocket serverSocket;
+    private Socket clientSocket1;
+    private Socket clientSocket2;
+    private ServerSocket serverSocket1;
     private final JFrame frame;
     private final int TIMEOUT_MS;
     private final JTextField status;
@@ -26,7 +39,6 @@ class Streamer{
 
     private void setup(){
         runFrame();
-
         JButton connectToButton = new JButton("Connect to desktop");
         JButton createServerButton = new JButton("Create server");
         JButton backButton = new JButton("BACK");
@@ -35,6 +47,7 @@ class Streamer{
         JTextField ipField = new JTextField("10.0.0.");
         JTextField portField = new JTextField("port");
         JCheckBox ipBindCheck = new JCheckBox("bind to ip");
+
 
         connectToButton.setFont(new Font("Candara", Font.BOLD, 18));
         connectToButton.addActionListener(new ActionListener(){
@@ -98,18 +111,19 @@ class Streamer{
         frame.add(ipBindCheck);
 
         ipField.setBackground(Color.BLACK);
+        ipField.setCaretColor(Color.white);
         ipField.setForeground(Color.white);
         ipField.setFont(new Font("Arial Rounded MT Bold", Font.BOLD, 20));
-        ipField.setBounds(20, 20, 140, 30);
         ipField.setVisible(false);
         frame.add(ipField);
 
         portField.setBackground(Color.BLACK);
+        portField.setCaretColor(Color.white);
         portField.setForeground(Color.white);
         portField.setFont(new Font("Arial Rounded MT Bold", Font.BOLD, 20));
-        portField.setBounds(20, 60, 100, 30);
         portField.setVisible(false);
         frame.add(portField);
+
 
         submitButton.setFont(new Font("Candara", Font.BOLD, 20));
         submitButton.setFocusable(false);
@@ -126,36 +140,31 @@ class Streamer{
                     return;
                 }
                 if (ipBindCheck.isVisible()){
-                    if (!ipBindCheck.isSelected()){
-                        try{
-                            serverSocket = new ServerSocket(Integer.parseInt(portStr));
-                        }catch (IOException ioException){
-                            status.setText("Failed to create server");
-                            return;
+                    try{
+                        if (!ipBindCheck.isSelected()){
+                            serverSocket1 = new ServerSocket(Integer.parseInt(portStr));
+                        }else{
+                            serverSocket1 = new ServerSocket(Integer.parseInt(portStr), 2, InetAddress.getByName(strIP));
                         }
-                    }else{
-                        try{
-                            serverSocket = new ServerSocket(Integer.parseInt(portStr), 2, InetAddress.getByName(strIP));
-                        }catch (IOException ioException){
-                            status.setText("Failed to create server");
-                            return;
-                        }
+                    }catch (IOException ioException){
+                        status.setText("Failed to create server");
+                        return;
                     }
-                    status.setText("Server Port: " + serverSocket.getLocalPort());
-                    AwaitConnection waiter = new AwaitConnection(serverSocket, status, frame, backButton, submitButton, ipField, portField, ipBindCheck);
-                    waiter.execute();
+                    status.setText("Server Port: " + serverSocket1.getLocalPort());
+                    AwaitConnection waiter1 = new AwaitConnection(serverSocket1, status, frame, backButton, submitButton, ipField, portField, ipBindCheck);
+                    waiter1.execute();
                 }
                 //client connects
                 else{
                     try{
-                        System.out.println("is it triggered everytime");
                         int port = Integer.parseInt(portStr);
                         //always creating a new socket to prevent closed socket exceptions
-                        clientSocket = new Socket();
-                        clientSocket.connect(new InetSocketAddress(strIP, port), TIMEOUT_MS);
+                        clientSocket1 = new Socket();
+                        clientSocket1.connect(new InetSocketAddress(strIP, port), TIMEOUT_MS);
                         status.setText("Connected to server");
+                        establishConnectionOnSecondPort(strIP);
                         hideUnnecessaryComponents();
-                        ConnectionFrame connection = new ConnectionFrame(frame,clientSocket);
+                        ConnectionFrame connection = new ConnectionFrame(frame, clientSocket1, clientSocket2);
                         connection.run();
 
                     }catch (IOException err){
@@ -163,6 +172,13 @@ class Streamer{
                         status.setText("Failed to connect");
                     }
                 }
+            }
+
+            private void establishConnectionOnSecondPort(String IP) throws IOException{
+                DataInputStream portStream = new DataInputStream(clientSocket1.getInputStream());
+                int secondPort = portStream.readInt();
+                clientSocket2 = new Socket();
+                clientSocket2.connect(new InetSocketAddress(IP, secondPort), TIMEOUT_MS);
             }
 
             private void hideUnnecessaryComponents(){
