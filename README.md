@@ -1,5 +1,5 @@
 # Streamer Program
-## Stream your desktop live 
+## Stream your desktop 
 - connect to server / create server for client
 - take screenshots as buffered images
 - convert buffered images to JPGs

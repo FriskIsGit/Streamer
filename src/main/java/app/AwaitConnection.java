@@ -1,3 +1,5 @@
+package app;
+
 import javax.swing.*;
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -35,7 +37,7 @@ class AwaitConnection extends SwingWorker<Object, Object>{
     @Override
     protected void done(){
         status.setText("Connection Established");
-        ConnectionFrame connection = new ConnectionFrame(this.rootFrame,this.acceptedSocket);
+        Connection connection = new Connection(this.rootFrame, this.acceptedSocket);
         connection.run();
         hideComponents();
     }

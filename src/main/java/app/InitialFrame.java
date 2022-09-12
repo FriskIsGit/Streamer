@@ -1,3 +1,4 @@
+package app;
 
 import javax.swing.*;
 import java.awt.*;
@@ -7,24 +8,19 @@ import java.io.IOException;
 import java.net.*;
 
 
-class Streamer{
+class InitialFrame{
     private Socket clientSocket;
     private ServerSocket serverSocket;
     private final JFrame frame;
     private final int TIMEOUT_MS;
     private final JTextField status;
-    protected Streamer(){
+    protected InitialFrame(){
         frame = new JFrame("Streamer");
         status = new JTextField("STATUS");
         TIMEOUT_MS = 3000;
     }
 
-    public static void main(String[] args){
-        Streamer streamerApp = new Streamer();
-        streamerApp.setup();
-    }
-
-    private void setup(){
+    public void setup(){
         runFrame();
 
         JButton connectToButton = new JButton("Connect to desktop");
@@ -155,7 +151,7 @@ class Streamer{
                         clientSocket.connect(new InetSocketAddress(strIP, port), TIMEOUT_MS);
                         status.setText("Connected to server");
                         hideUnnecessaryComponents();
-                        ConnectionFrame connection = new ConnectionFrame(frame,clientSocket);
+                        Connection connection = new Connection(frame,clientSocket);
                         connection.run();
 
                     }catch (IOException err){
